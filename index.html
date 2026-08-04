@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>StickWhick 3D — Turn Photos into 3D Stickers</title>
+  <meta name="description" content="Turn any photo, pet, logo or item into die-cut stickers with real-time 3D WebGL preview, holographic finishes, 3D peeling, and product mockups.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --bg-alt: #131419;
+      --surface: #1a1b22;
+      --surface-2: #242630;
+      --surface-3: #2e303d;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-a: #67e8f9;
+      --accent-b: #c084fc;
+      --accent-c: #f472b6;
+      --accent-glow: rgba(139, 92, 246, 0.4);
+      --success: #34d399;
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; min-height: 100vh;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, h4 { font-family: 'Bricolage Grotesque', system-ui, sans-serif; }
+
+    /* Ambient Animated Blobs */
+    .bg-ambient {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+    }
+    .blob {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.28;
+      animation: floatAnim 18s ease-in-out infinite alternate;
+    }
+    .blob-1 { width: 500px; height: 500px; background: var(--accent-a); top: -150px; left: -150px; }
+    .blob-2 { width: 450px; height: 450px; background: var(--accent-b); bottom: -100px; right: -100px; animation-delay: -6s; }
+    .blob-3 { width: 350px; height: 350px; background: var(--accent-c); top: 40%; right: 15%; animation-delay: -12s; }
+    @keyframes floatAnim {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(40px, -30px) scale(1.1); }
+      100% { transform: translate(-30px, 30px) scale(0.95); }
+    }
+
+    /* App Layout */
+    .app-wrap {
+      position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 24px 20px 60px;
+    }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 30px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 12px; font-size: 1.35rem; font-weight: 800; letter-spacing: -0.03em;
+    }
+    .brand-logo {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b), var(--accent-c));
+      display: flex; align-items: center; justify-content: center; font-size: 1.25rem;
+      box-shadow: 0 4px 20px var(--accent-glow); transform: rotate(-6deg);
+    }
+    .brand-text span { color: var(--accent-b); }
+    .header-badges { display: flex; align-items: center; gap: 10px; }
+    .badge {
+      font-size: 0.78rem; font-weight: 600; color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 999px; backdrop-filter: blur(8px);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+    .hero { text-align: center; margin-bottom: 30px; }
+    .hero-pill {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600;
+      color: var(--accent-a); background: rgba(103, 232, 249, 0.08);
+      border: 1px solid rgba(103, 232, 249, 0.2); padding: 6px 16px; border-radius: 999px; margin-bottom: 14px;
+    }
+    .hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.1; font-weight: 800; margin-bottom: 12px; }
+    .grad-text {
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b) 50%, var(--accent-c));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero p { font-size: 1.05rem; color: var(--text-muted); max-width: 620px; margin: 0 auto; line-height: 1.6; }
+
+    /* Steps Bar */
+    .step-nav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 30px; flex-wrap: wrap; }
+    .step-item {
+      display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border);
+      padding: 10px 18px; border-radius: 999px; font-size: 0.88rem; font-weight: 600; color: var(--text-muted);
+      cursor: pointer; transition: all 0.25s ease;
+    }
+    .step-item.active {
+      background: var(--surface-2); border-color: var(--accent-b); color: var(--text);
+      box-shadow: 0 0 20px rgba(192, 132, 252, 0.15);
+    }
+    .step-num {
+      width: 24px; height: 24px; border-radius: 50%; background: var(--surface-3); color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;
+    }
+    .step-item.active .step-num { background: linear-gradient(135deg, var(--accent-b), var(--accent-c)); color: #000; }
+
+    /* Stage Cards */
+    .stage-card {
+      background: rgba(26, 27, 34, 0.8); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 30px; backdrop-filter: blur(16px); box-shadow: 0 24px 60px -15px rgba(0, 0, 0, 0.6); display: none;
+    }
+    .stage-card.active { display: block; animation: fadeIn 0.35s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Stage 1: Upload & Presets */
+    .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+    @media (max-width: 840px) { .upload-grid { grid-template-columns: 1fr; } }
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 40px 24px; text-align: center;
+      cursor: pointer; background: radial-gradient(circle at 50% 0%, rgba(192, 132, 252, 0.05), transparent 70%);
+      transition: all 0.25s ease; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent-b); background: radial-gradient(circle at 50% 0%, rgba(192, 132, 252, 0.15), transparent 70%);
+      transform: translateY(-2px);
+    }
+    .drop-icon {
+      width: 64px; height: 64px; border-radius: 20px;
+      background: linear-gradient(135deg, rgba(103, 232, 249, 0.15), rgba(192, 132, 252, 0.15));
+      display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: var(--accent-b);
+    }
+
+    .preset-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; }
+    .preset-box h4 { font-size: 0.95rem; margin-bottom: 12px; color: var(--text-muted); }
+    .preset-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .preset-thumb {
+      aspect-ratio: 1; border-radius: var(--radius-sm); border: 2px solid var(--border); overflow: hidden;
+      cursor: pointer; position: relative; transition: all 0.2s ease; background: var(--bg);
+    }
+    .preset-thumb canvas { width: 100%; height: 100%; object-fit: cover; }
+    .preset-thumb:hover { border-color: var(--accent-a); transform: scale(1.04); }
+    .preset-thumb span {
+      position: absolute; bottom: 0; inset-x: 0; background: rgba(0,0,0,0.75); font-size: 0.72rem;
+      text-align: center; padding: 4px; font-weight: 600;
+    }
+
+    /* Camera View */
+    .camera-container { max-width: 640px; margin: 0 auto; text-align: center; }
+    .camera-preview-wrap {
+      position: relative; border-radius: var(--radius-md); overflow: hidden; background: #000;
+      aspect-ratio: 4/3; margin-bottom: 20px; border: 1px solid var(--border);
+    }
+    .camera-preview-wrap video { width: 100%; height: 100%; object-fit: cover; }
+    .camera-controls { display: flex; align-items: center; justify-content: center; gap: 18px; }
+    .shutter-btn {
+      width: 70px; height: 70px; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fff, var(--accent-b) 70%);
+      border: 4px solid var(--surface-2); cursor: pointer; box-shadow: 0 8px 24px rgba(192,132,252,0.4);
+      transition: transform 0.15s ease;
+    }
+    .shutter-btn:hover { transform: scale(1.08); }
+
+    /* Buttons */
+    .btn {
+      appearance: none; border: none; font-family: inherit; font-weight: 600; font-size: 0.9rem;
+      padding: 12px 22px; border-radius: 12px; cursor: pointer; display: inline-flex; align-items: center;
+      justify-content: center; gap: 8px; transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-b), var(--accent-c)); color: #0f0b15;
+      box-shadow: 0 8px 24px -6px rgba(192, 132, 252, 0.5);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -6px rgba(192, 132, 252, 0.7); }
+    .btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent-a); color: var(--accent-a); }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid transparent; }
+    .btn-ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+    .btn-block { width: 100%; }
+
+    /* Studio Layout */
+    .studio-layout { display: grid; grid-template-columns: 1fr 340px; gap: 28px; align-items: start; }
+    @media (max-width: 960px) { .studio-layout { grid-template-columns: 1fr; } }
+
+    .viewport-container {
+      position: relative;
+      background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--bg-alt) 0% 50%) 0 0 / 24px 24px;
+      border-radius: var(--radius-md); border: 1px solid var(--border); min-height: 480px;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    #webglCanvas { width: 100% !important; height: 100% !important; min-height: 480px; display: block; cursor: grab; }
+    #webglCanvas:active { cursor: grabbing; }
+
+    .refine-canvas-wrap { position: relative; max-width: 100%; max-height: 460px; display: flex; align-items: center; justify-content: center; }
+    #refineCanvas { max-width: 100%; max-height: 440px; border-radius: 12px; cursor: crosshair; }
+
+    .tool-panel { display: flex; flex-direction: column; gap: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; }
+    .tool-panel-section { display: flex; flex-direction: column; gap: 12px; }
+    .tool-panel-section h4 {
+      font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+      border-bottom: 1px solid var(--border); padding-bottom: 6px;
+    }
+
+    .control-field { display: flex; flex-direction: column; gap: 6px; }
+    .control-field label { display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+    .control-field label span.val { color: var(--text); font-weight: 700; }
+
+    input[type="range"] {
+      width: 100%; height: 6px; background: var(--surface-3); border-radius: 999px; appearance: none; outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-b), var(--accent-c)); cursor: pointer;
+    }
+
+    .tool-btn-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .tool-btn {
+      background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); padding: 10px;
+      border-radius: 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all 0.2s ease;
+    }
+    .tool-btn:hover { color: var(--text); border-color: var(--accent-a); }
+    .tool-btn.active { background: rgba(192, 132, 252, 0.15); border-color: var(--accent-b); color: var(--accent-b); }
+
+    .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+    .swatch { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid var(--border); transition: transform 0.15s ease; }
+    .swatch:hover { transform: scale(1.1); }
+    .swatch.active { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2); }
+
+    .finishes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .finish-card {
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
+      font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;
+    }
+    .finish-card:hover { border-color: var(--accent-a); }
+    .finish-card.active {
+      background: linear-gradient(135deg, rgba(103, 232, 249, 0.12), rgba(192, 132, 252, 0.12));
+      border-color: var(--accent-b); color: var(--text); box-shadow: 0 0 15px rgba(192, 132, 252, 0.2);
+    }
+
+    .mockup-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mockup-item {
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px;
+      font-size: 0.75rem; font-weight: 600; text-align: center; cursor: pointer; transition: all 0.2s ease;
+    }
+    .mockup-item:hover { border-color: var(--accent-a); }
+    .mockup-item.active { background: var(--accent-b); color: #000; border-color: var(--accent-b); }
+
+    .viewport-overlay {
+      position: absolute; top: 14px; left: 14px; display: flex; align-items: center; gap: 8px;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); padding: 6px 14px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600; border: 1px solid var(--border); pointer-events: none;
+    }
+
+    .loading-overlay {
+      position: absolute; inset: 0; background: rgba(15, 16, 21, 0.85); backdrop-filter: blur(12px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+      border-radius: var(--radius-md);
+    }
+    .spinner {
+      width: 50px; height: 50px; border: 4px solid var(--surface-3); border-top-color: var(--accent-b);
+      border-right-color: var(--accent-a); border-radius: 50%; animation: spin 0.9s linear infinite; margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 0.95rem; font-weight: 600; }
+    .loading-subtext { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+    footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.82rem; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Light Blobs -->
+  <div class="bg-ambient">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="app-wrap">
+    <header>
+      <div class="brand">
+        <div class="brand-logo">✂️</div>
+        <div class="brand-text">Stick<span>Whick 3D</span></div>
+      </div>
+      <div class="header-badges">
+        <div class="badge"><span class="badge-dot"></span> 100% In-Browser Privacy</div>
+        <div class="badge">✨ WebGL 3D Studio</div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-pill">🌟 Universal AI Cutout & Real-Time 3D Engine</div>
+      <h1>Turn any photo into a <span class="grad-text">3D Die-Cut Sticker</span></h1>
+      <p>Upload photos of people, pets, sneakers, cars, or logos. Customize die-cut borders, holographic finishes, 3D corner peeling, and test on 3D laptops & water bottles!</p>
+    </section>
+
+    <nav class="step-nav">
+      <div class="step-item active" data-step="1"><span class="step-num">1</span> Add Photo / Preset</div>
+      <div class="step-item" data-step="2"><span class="step-num">2</span> Cutout & Refine</div>
+      <div class="step-item" data-step="3"><span class="step-num">3</span> 3D Studio & Finishes</div>
+      <div class="step-item" data-step="4"><span class="step-num">4</span> 3D Product Mockup</div>
+    </nav>
+
+    <!-- STAGE 1: Upload -->
+    <main class="stage-card active" id="stage-upload">
+      <div class="upload-grid">
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+          </div>
+          <h3>Upload Any Photo</h3>
+          <p>Drag & drop JPG/PNG here, or click to browse</p>
+          <input type="file" id="fileInput" accept="image/*" class="hidden">
+        </div>
+
+        <div class="preset-box">
+          <h4>Or Try Instant 1-Click Samples:</h4>
+          <div class="preset-gallery">
+            <div class="preset-thumb" data-preset="dog"><span>Cute Dog</span></div>
+            <div class="preset-thumb" data-preset="sneaker"><span>Sneaker</span></div>
+            <div class="preset-thumb" data-preset="logo"><span>Neon Logo</span></div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn btn-secondary btn-block" id="askCameraBtn">📷 Use Live Camera</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- STAGE CAMERA -->
+    <main class="stage-card" id="stage-camera">
+      <div class="camera-container">
+        <div class="camera-preview-wrap">
+          <video id="video" autoplay playsinline muted></video>
+        </div>
+        <div class="camera-controls">
+          <button class="btn btn-secondary" id="switchCamBtn">🔄 Switch</button>
+          <div class="shutter-btn" id="shutterBtn" title="Take Snapshot"></div>
+          <button class="btn btn-secondary" id="cancelCamBtn">✕ Cancel</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- STAGE 2: Refine -->
+    <main class="stage-card" id="stage-refine">
+      <div class="studio-layout">
+        <div class="viewport-container">
+          <div class="refine-canvas-wrap">
+            <canvas id="refineCanvas"></canvas>
+          </div>
+          <div class="viewport-overlay"><span>✏️ Click & Drag to refine background cutouts</span></div>
+        </div>
+
+        <div class="tool-panel">
+          <div class="tool-panel-section">
+            <h4>Refinement Tools</h4>
+            <div class="tool-btn-group">
+              <button class="tool-btn active" data-tool="magic"><span>🪄</span> Magic Wand</button>
+              <button class="tool-btn" data-tool="erase"><span>🧹</span> Eraser</button>
+              <button class="tool-btn" data-tool="restore"><span>🖌️</span> Restore</button>
+            </div>
+          </div>
+          <div class="tool-panel-section">
+            <button class="btn btn-primary btn-block" id="proceedStudioBtn">Enter 3D Studio →</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- STAGE 3 & 4: 3D Studio -->
+    <main class="stage-card" id="stage-studio">
+      <div class="studio-layout">
+        <div class="viewport-container" id="webglContainer">
+          <canvas id="webglCanvas"></canvas>
+          <div class="viewport-overlay"><span>🖱️ Drag to rotate 3D camera • Scroll to zoom</span></div>
+        </div>
+
+        <div class="tool-panel">
+          <div class="tool-panel-section">
+            <h4>Die-Cut Border</h4>
+            <div class="control-field">
+              <label>Thickness <span class="val" id="borderWidthVal">16px</span></label>
+              <input type="range" id="borderWidthRange" min="0" max="40" value="16">
+            </div>
+            <div class="control-field">
+              <label>Border Color</label>
+              <div class="swatches">
+                <div class="swatch active" style="background:#ffffff;" data-color="#ffffff"></div>
+                <div class="swatch" style="background:#111214;" data-color="#111214"></div>
+                <div class="swatch" style="background:#67e8f9;" data-color="#67e8f9"></div>
+                <div class="swatch" style="background:#c084fc;" data-color="#c084fc"></div>
+                <div class="swatch" style="background:#f472b6;" data-color="#f472b6"></div>
+                <div class="swatch" style="background:#facc15;" data-color="#facc15"></div>
+              </div>
+            </div>
+            <div class="control-field">
+              <label>Corner Smoothness <span class="val" id="smoothVal">Medium</span></label>
+              <input type="range" id="smoothRange" min="0" max="2" value="1">
+            </div>
+          </div>
+
+          <div class="tool-panel-section">
+            <h4>3D Finishes</h4>
+            <div class="finishes-grid">
+              <div class="finish-card active" data-finish="glossy"><span class="finish-icon">🌟</span> Glossy Vinyl</div>
+              <div class="finish-card" data-finish="holographic"><span class="finish-icon">🌈</span> Holographic</div>
+              <div class="finish-card" data-finish="metallic"><span class="finish-icon">✨</span> Gold Foil</div>
+              <div class="finish-card" data-finish="glitter"><span class="finish-icon">💎</span> Glitter</div>
+              <div class="finish-card" data-finish="matte"><span class="finish-icon">📜</span> Matte Paper</div>
+            </div>
+          </div>
+
+          <div class="tool-panel-section">
+            <h4>3D Corner Peel</h4>
+            <div class="control-field">
+              <label>Peel Angle <span class="val" id="peelVal">15%</span></label>
+              <input type="range" id="peelRange" min="0" max="0.6" step="0.05" value="0.15">
+            </div>
+          </div>
+
+          <div class="tool-panel-section">
+            <h4>3D Product Mockups</h4>
+            <div class="mockup-grid">
+              <div class="mockup-item active" data-mockup="none">3D Solo</div>
+              <div class="mockup-item" data-mockup="laptop">💻 Laptop</div>
+              <div class="mockup-item" data-mockup="bottle">🥤 Bottle</div>
+              <div class="mockup-item" data-mockup="phone">📱 Phone</div>
+              <div class="mockup-item" data-mockup="skateboard">🛹 Skate</div>
+              <div class="mockup-item" data-mockup="journal">📓 Journal</div>
+            </div>
+          </div>
+
+          <div class="tool-panel-section" style="gap:8px;">
+            <button class="btn btn-primary btn-block" id="download2DPng">⬇ Download Transparent 2D PNG</button>
+            <button class="btn btn-secondary btn-block" id="download3DPng">📸 Snapshot 3D Viewport</button>
+            <button class="btn btn-ghost btn-block" id="retryBtn">↺ Try Another Photo</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div id="stage-mockup"></div>
+
+    <div class="loading-overlay hidden" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loadingText">Processing...</div>
+      <div class="loading-subtext" id="loadingSubtext">Please wait a moment</div>
+    </div>
+
+    <footer>StickWhick 3D — Engineered with WebGL, Three.js & Canvas 2D • 100% Client-Side Processing.</footer>
+  </div>
+
+  <!-- External CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js"></script>
+
+  <!-- Complete Embedded JS Logic -->
+  <script>
+    // 1. CutoutEngine
+    class CutoutEngine {
+      constructor() { this.bodyPixModel = null; }
+      async loadBodyPix() {
+        if (this.bodyPixModel) return this.bodyPixModel;
+        if (typeof bodyPix === 'undefined') return null;
+        try {
+          this.bodyPixModel = await bodyPix.load({ architecture: 'MobileNetV1', outputStride: 16, multiplier: 0.75, quantBytes: 2 });
+          return this.bodyPixModel;
+        } catch (e) { return null; }
+      }
+      async generateMask(image, mode = 'auto') {
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        const workCanvas = document.createElement('canvas');
+        const MAX_DIM = 900;
+        const scale = Math.min(1, MAX_DIM / Math.max(width, height));
+        const w = Math.round(width * scale), h = Math.round(height * scale);
+        workCanvas.width = w; workCanvas.height = h;
+        const ctx = workCanvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, w, h);
+
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = w; maskCanvas.height = h;
+        const maskCtx = maskCanvas.getContext('2d');
+
+        if (mode === 'person') {
+          const net = await this.loadBodyPix();
+          if (net) {
+            try {
+              const segmentation = await net.segmentPerson(workCanvas, { internalResolution: 'medium', segmentationThreshold: 0.55 });
+              const imgData = maskCtx.createImageData(w, h);
+              for (let i = 0; i < segmentation.data.length; i++) {
+                const on = segmentation.data[i] === 1, idx = i * 4;
+                imgData.data[idx] = 255; imgData.data[idx + 1] = 255; imgData.data[idx + 2] = 255;
+                imgData.data[idx + 3] = on ? 255 : 0;
+              }
+              maskCtx.putImageData(imgData, 0, 0);
+              return { workCanvas, maskCanvas };
+            } catch (e) {}
+          }
+        }
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data, maskData = maskCtx.createImageData(w, h);
+        const bgSamples = [], cornerSize = Math.max(4, Math.floor(Math.min(w, h) * 0.05));
+
+        for (let y = 0; y < cornerSize; y++) {
+          for (let x = 0; x < cornerSize; x++) {
+            let idx = (y * w + x) * 4; bgSamples.push([data[idx], data[idx + 1], data[idx + 2]]);
+            idx = (y * w + (w - 1 - x)) * 4; bgSamples.push([data[idx], data[idx + 1], data[idx + 2]]);
+            idx = ((h - 1 - y) * w + x) * 4; bgSamples.push([data[idx], data[idx + 1], data[idx + 2]]);
+            idx = ((h - 1 - y) * w + (w - 1 - x)) * 4; bgSamples.push([data[idx], data[idx + 1], data[idx + 2]]);
+          }
+        }
+        let avgR = 0, avgG = 0, avgB = 0;
+        for (const s of bgSamples) { avgR += s[0]; avgG += s[1]; avgB += s[2]; }
+        avgR /= bgSamples.length; avgG /= bgSamples.length; avgB /= bgSamples.length;
+
+        const visited = new Uint8Array(w * h), queue = [];
+        for (let x = 0; x < w; x++) { queue.push(x, 0, x, h - 1); }
+        for (let y = 1; y < h - 1; y++) { queue.push(0, y, w - 1, y); }
+
+        const TOLERANCE = 48;
+        let head = 0;
+        while (head < queue.length) {
+          const cx = queue[head++], cy = queue[head++];
+          const cIdx = cy * w + cx;
+          if (visited[cIdx]) continue;
+          visited[cIdx] = 1;
+
+          const pIdx = cIdx * 4;
+          const r = data[pIdx], g = data[pIdx + 1], b = data[pIdx + 2];
+          const dist = Math.sqrt((r - avgR) ** 2 + (g - avgG) ** 2 + (b - avgB) ** 2);
+
+          if (dist < TOLERANCE || (r > 240 && g > 240 && b > 240) || (r < 15 && g < 15 && b < 15)) {
+            const neighbors = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+            for (const [nx, ny] of neighbors) {
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                const nIdx = ny * w + nx;
+                if (!visited[nIdx]) {
+                  const npIdx = nIdx * 4;
+                  const ndist = Math.sqrt((data[npIdx] - avgR) ** 2 + (data[npIdx + 1] - avgG) ** 2 + (data[npIdx + 2] - avgB) ** 2);
+                  if (ndist < TOLERANCE + 20) queue.push(nx, ny);
+                }
+              }
+            }
+          }
+        }
+
+        for (let i = 0; i < w * h; i++) {
+          const idx = i * 4;
+          maskData.data[idx] = 255; maskData.data[idx + 1] = 255; maskData.data[idx + 2] = 255;
+          maskData.data[idx + 3] = visited[i] ? 0 : 255;
+        }
+        maskCtx.putImageData(maskData, 0, 0);
+        return { workCanvas, maskCanvas };
+      }
+
+      applyBrush(maskCanvas, x, y, radius, isErase) {
+        const ctx = maskCanvas.getContext('2d');
+        ctx.save();
+        ctx.globalCompositeOperation = isErase ? 'destination-out' : 'source-over';
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      magicWandErase(workCanvas, maskCanvas, startX, startY, tolerance = 35) {
+        const w = workCanvas.width, h = workCanvas.height;
+        const wctx = workCanvas.getContext('2d'), mctx = maskCanvas.getContext('2d');
+        const imgData = wctx.getImageData(0, 0, w, h), maskData = mctx.getImageData(0, 0, w, h);
+        const targetIdx = (startY * w + startX) * 4;
+        const tr = imgData.data[targetIdx], tg = imgData.data[targetIdx + 1], tb = imgData.data[targetIdx + 2];
+        const visited = new Uint8Array(w * h), queue = [startX, startY];
+
+        while (queue.length > 0) {
+          const cy = queue.pop(), cx = queue.pop();
+          const cIdx = cy * w + cx;
+          if (visited[cIdx]) continue;
+          visited[cIdx] = 1;
+          const pIdx = cIdx * 4;
+          const diff = Math.sqrt((imgData.data[pIdx] - tr) ** 2 + (imgData.data[pIdx + 1] - tg) ** 2 + (imgData.data[pIdx + 2] - tb) ** 2);
+          if (diff <= tolerance) {
+            maskData.data[pIdx + 3] = 0;
+            const neighbors = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+            for (const [nx, ny] of neighbors) {
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h && !visited[ny * w + nx]) queue.push(nx, ny);
+            }
+          }
+        }
+        mctx.putImageData(maskData, 0, 0);
+      }
+
+      createSampleCanvas(type) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 600; canvas.height = 600;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#111214'; ctx.fillRect(0, 0, 600, 600);
+
+        if (type === 'dog') {
+          ctx.fillStyle = '#67e8f9'; ctx.fillRect(0, 0, 600, 600);
+          ctx.fillStyle = '#d97706'; ctx.beginPath(); ctx.arc(300, 300, 140, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#92400e';
+          ctx.beginPath(); ctx.ellipse(170, 240, 45, 90, -0.4, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(430, 240, 45, 90, 0.4, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1e1b4b';
+          ctx.beginPath(); ctx.arc(245, 270, 22, 0, Math.PI * 2); ctx.arc(355, 270, 22, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(252, 262, 8, 0, Math.PI * 2); ctx.arc(362, 262, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fef3c7'; ctx.beginPath(); ctx.ellipse(300, 330, 60, 45, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1e1b4b'; ctx.beginPath(); ctx.ellipse(300, 310, 24, 16, 0, 0, Math.PI * 2); ctx.fill();
+        } else if (type === 'sneaker') {
+          ctx.fillStyle = '#18181b'; ctx.fillRect(0, 0, 600, 600);
+          const grad = ctx.createLinearGradient(100, 200, 500, 400);
+          grad.addColorStop(0, '#c084fc'); grad.addColorStop(1, '#f472b6');
+          ctx.fillStyle = grad;
+          ctx.beginPath(); ctx.moveTo(120, 360); ctx.lineTo(160, 240); ctx.lineTo(280, 220); ctx.lineTo(440, 290); ctx.lineTo(490, 360); ctx.lineTo(480, 400); ctx.lineTo(120, 400); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#67e8f9'; ctx.fillRect(100, 395, 400, 35);
+        } else {
+          ctx.fillStyle = '#09090b'; ctx.fillRect(0, 0, 600, 600);
+          ctx.save(); ctx.translate(300, 300); ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = '#8b5cf6'; ctx.fillRect(-130, -130, 260, 260);
+          ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(0, 0, 90, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+          ctx.fillStyle = '#ffffff'; ctx.font = 'bold 90px "Bricolage Grotesque", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('3D', 300, 300);
+        }
+        return canvas;
+      }
+    }
+    const engine = new CutoutEngine();
+
+    // 2. Sticker2D
+    class Sticker2D {
+      constructor() { this.borderWidth = 16; this.borderColor = '#ffffff'; this.smoothness = 1; }
+      render(workCanvas, maskCanvas) {
+        const w = workCanvas.width, h = workCanvas.height, pad = this.borderWidth + 12;
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = w + pad * 2; outCanvas.height = h + pad * 2;
+        const ctx = outCanvas.getContext('2d');
+
+        const processedMask = document.createElement('canvas');
+        processedMask.width = w; processedMask.height = h;
+        const pmCtx = processedMask.getContext('2d');
+        pmCtx.drawImage(maskCanvas, 0, 0);
+
+        if (this.smoothness > 0) {
+          const tmp = document.createElement('canvas');
+          tmp.width = w; tmp.height = h;
+          const tctx = tmp.getContext('2d');
+          tctx.filter = `blur(${this.smoothness * 2}px)`; tctx.drawImage(maskCanvas, 0, 0);
+          pmCtx.clearRect(0, 0, w, h); pmCtx.drawImage(tmp, 0, 0);
+        }
+
+        if (this.borderWidth > 0) {
+          const steps = 36, silhouette = document.createElement('canvas');
+          silhouette.width = outCanvas.width; silhouette.height = outCanvas.height;
+          const sctx = silhouette.getContext('2d');
+          for (let i = 0; i < steps; i++) {
+            const angle = (i / steps) * Math.PI * 2;
+            sctx.drawImage(processedMask, pad + Math.cos(angle) * this.borderWidth, pad + Math.sin(angle) * this.borderWidth);
+          }
+          sctx.globalCompositeOperation = 'source-in'; sctx.fillStyle = this.borderColor; sctx.fillRect(0, 0, silhouette.width, silhouette.height);
+          ctx.drawImage(silhouette, 0, 0);
+        }
+
+        const fgCanvas = document.createElement('canvas');
+        fgCanvas.width = w; fgCanvas.height = h;
+        const fgCtx = fgCanvas.getContext('2d');
+        fgCtx.drawImage(workCanvas, 0, 0); fgCtx.globalCompositeOperation = 'destination-in'; fgCtx.drawImage(processedMask, 0, 0);
+        ctx.drawImage(fgCanvas, pad, pad);
+        return outCanvas;
+      }
+    }
+    const sticker2D = new Sticker2D();
+
+    // 3. Sticker3D
+    class Sticker3D {
+      constructor() {
+        this.container = null; this.scene = null; this.camera = null; this.renderer = null; this.controls = null;
+        this.stickerMesh = null; this.mockupGroup = null; this.currentFinish = 'glossy'; this.currentMockup = 'none';
+        this.peelAmount = 0.15; this.stickerTexture = null;
+      }
+      init(container, canvas) {
+        this.container = container;
+        const w = container.clientWidth || 800, h = container.clientHeight || 500;
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+        this.camera.position.set(0, 0, 8);
+
+        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+        this.renderer.setSize(w, h);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        if (typeof THREE.OrbitControls !== 'undefined') {
+          this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          this.controls.enableDamping = true;
+        }
+
+        const ambient = new THREE.AmbientLight(0xffffff, 0.85); this.scene.add(ambient);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.4); dirLight.position.set(5, 8, 5); this.scene.add(dirLight);
+        const pointLight = new THREE.PointLight(0xc084fc, 1.2, 12); pointLight.position.set(-4, -2, 4); this.scene.add(pointLight);
+
+        window.addEventListener('resize', () => this.onResize());
+        this.animate();
+      }
+      onResize() {
+        if (!this.container || !this.renderer) return;
+        const w = this.container.clientWidth, h = this.container.clientHeight;
+        this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w, h);
+      }
+      updateSticker(compositeCanvas) {
+        if (!this.scene) return;
+        if (this.stickerMesh) { this.scene.remove(this.stickerMesh); this.stickerMesh = null; }
+
+        const aspect = compositeCanvas.width / compositeCanvas.height, width = 4, height = width / aspect;
+        this.stickerTexture = new THREE.CanvasTexture(compositeCanvas);
+        const geometry = new THREE.BoxGeometry(width, height, 0.08, 32, 32, 1);
+        this.applyPeel(geometry, width, height);
+
+        const material = this.createMaterial();
+        const materials = [
+          new THREE.MeshStandardMaterial({ color: 0xffffff }), new THREE.MeshStandardMaterial({ color: 0xffffff }),
+          new THREE.MeshStandardMaterial({ color: 0xffffff }), new THREE.MeshStandardMaterial({ color: 0xffffff }),
+          material, new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.8 })
+        ];
+        this.stickerMesh = new THREE.Mesh(geometry, materials);
+        if (this.currentMockup === 'none') this.scene.add(this.stickerMesh);
+        else this.applyMockup();
+      }
+      applyPeel(geometry, width, height) {
+        const pos = geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i);
+          const dx = (x + width / 2) / width, dy = (y + height / 2) / height;
+          if (dx > 0.6 && dy > 0.6) {
+            pos.setZ(i, pos.getZ(i) + (dx - 0.6) * (dy - 0.6) * 6 * this.peelAmount * 3.5);
+          }
+        }
+        geometry.computeVertexNormals();
+      }
+      createMaterial() {
+        const params = { map: this.stickerTexture, transparent: true, alphaTest: 0.05 };
+        if (this.currentFinish === 'glossy') { params.roughness = 0.1; params.metalness = 0.1; }
+        else if (this.currentFinish === 'metallic') { params.roughness = 0.25; params.metalness = 0.85; }
+        else if (this.currentFinish === 'glitter') { params.roughness = 0.35; params.metalness = 0.5; }
+        else if (this.currentFinish === 'matte') { params.roughness = 0.9; params.metalness = 0.0; }
+        return new THREE.MeshStandardMaterial(params);
+      }
+      setFinish(f) { this.currentFinish = f; if (this.stickerMesh) this.stickerMesh.material[4] = this.createMaterial(); }
+      setPeel(p) { this.peelAmount = p; if (this.stickerTexture) this.updateSticker(this.stickerTexture.image); }
+      setMockup(m) {
+        this.currentMockup = m;
+        if (this.mockupGroup) { this.scene.remove(this.mockupGroup); this.mockupGroup = null; }
+        if (m === 'none') {
+          if (this.stickerMesh) { this.stickerMesh.position.set(0,0,0); this.stickerMesh.scale.set(1,1,1); this.scene.add(this.stickerMesh); }
+          return;
+        }
+        this.mockupGroup = new THREE.Group();
+        const metal = new THREE.MeshStandardMaterial({ color: 0x27272a, metalness: 0.8, roughness: 0.3 });
+
+        if (m === 'laptop') {
+          const body = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 0.3), metal); this.mockupGroup.add(body);
+          if (this.stickerMesh) { this.stickerMesh.position.set(0, 0, 0.16); this.stickerMesh.scale.set(0.65, 0.65, 0.65); this.mockupGroup.add(this.stickerMesh); }
+        } else if (m === 'bottle') {
+          const bottle = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 5.5, 32), new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.6 })); this.mockupGroup.add(bottle);
+          if (this.stickerMesh) { this.stickerMesh.position.set(0, 0, 1.62); this.stickerMesh.scale.set(0.55, 0.55, 0.55); this.mockupGroup.add(this.stickerMesh); }
+        } else if (m === 'phone') {
+          const phone = new THREE.Mesh(new THREE.BoxGeometry(2.8, 5.6, 0.25), new THREE.MeshStandardMaterial({ color: 0x18181b, metalness: 0.9 })); this.mockupGroup.add(phone);
+          if (this.stickerMesh) { this.stickerMesh.position.set(0, -0.6, 0.14); this.stickerMesh.scale.set(0.5, 0.5, 0.5); this.mockupGroup.add(this.stickerMesh); }
+        } else if (m === 'skateboard') {
+          const deck = new THREE.Mesh(new THREE.BoxGeometry(2.2, 7.5, 0.2), new THREE.MeshStandardMaterial({ color: 0xd97706 })); this.mockupGroup.add(deck);
+          if (this.stickerMesh) { this.stickerMesh.position.set(0, 0, 0.12); this.stickerMesh.scale.set(0.48, 0.48, 0.48); this.mockupGroup.add(this.stickerMesh); }
+        } else if (m === 'journal') {
+          const book = new THREE.Mesh(new THREE.BoxGeometry(3.8, 5.2, 0.5), new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 })); this.mockupGroup.add(book);
+          if (this.stickerMesh) { this.stickerMesh.position.set(0, 0, 0.28); this.stickerMesh.scale.set(0.6, 0.6, 0.6); this.mockupGroup.add(this.stickerMesh); }
+        }
+        this.scene.add(this.mockupGroup);
+      }
+      applyMockup() { if (this.currentMockup !== 'none') this.setMockup(this.currentMockup); }
+      animate() {
+        requestAnimationFrame(() => this.animate());
+        if (this.controls) this.controls.update();
+        if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
+      }
+      get3DScreenshot() { return this.renderer ? this.renderer.domElement.toDataURL('image/png') : null; }
+    }
+    const sticker3D = new Sticker3D();
+
+    // 4. Main Controller
+    (function() {
+      const $ = (id) => document.getElementById(id);
+      let workCanvas = null, maskCanvas = null, compositeCanvas = null;
+      let activeTool = 'magic', brushSize = 24, isMouseDown = false, cameraStream = null, facingMode = 'user';
+
+      function init() {
+        setupNav(); setupUpload(); setupPresets(); setupCamera(); setupRefine(); setupControls();
+        sticker3D.init($('webglContainer'), $('webglCanvas'));
+      }
+
+      function setStage(name) {
+        document.querySelectorAll('.stage-card').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.step-item').forEach(el => el.classList.remove('active'));
+        const card = $('stage-' + name); if (card) card.classList.add('active');
+        const map = { upload: 1, refine: 2, studio: 3, mockup: 4 };
+        const step = document.querySelector(`.step-item[data-step="${map[name]}"]`);
+        if (step) step.classList.add('active');
+        if (name === 'studio' || name === 'mockup') sticker3D.onResize();
+      }
+
+      function setupNav() {
+        document.querySelectorAll('.step-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const s = el.dataset.step;
+            if (s === '1') setStage('upload');
+            else if (s === '2' && workCanvas) setStage('refine');
+            else if (s === '3' && compositeCanvas) setStage('studio');
+            else if (s === '4' && compositeCanvas) setStage('mockup');
+          });
+        });
+      }
+
+      function setupUpload() {
+        const dz = $('dropZone'), fi = $('fileInput');
+        dz.addEventListener('click', () => fi.click());
+        dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+        dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+        dz.addEventListener('drop', (e) => {
+          e.preventDefault(); dz.classList.remove('dragover');
+          if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+        });
+        fi.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+      }
+
+      function handleFile(file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image(); img.onload = () => startCutout(img); img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function setupPresets() {
+        document.querySelectorAll('.preset-thumb').forEach(thumb => {
+          const canvas = engine.createSampleCanvas(thumb.dataset.preset);
+          thumb.appendChild(canvas);
+          thumb.addEventListener('click', () => startCutout(canvas));
+        });
+      }
+
+      function setupCamera() {
+        $('askCameraBtn').addEventListener('click', async () => {
+          try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+            $('video').srcObject = cameraStream; setStage('camera');
+          } catch (e) { alert('Camera access failed.'); }
+        });
+        $('switchCamBtn').addEventListener('click', async () => {
+          facingMode = facingMode === 'user' ? 'environment' : 'user';
+          if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+          $('video').srcObject = cameraStream;
+        });
+        $('cancelCamBtn').addEventListener('click', () => {
+          if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+          setStage('upload');
+        });
+        $('shutterBtn').addEventListener('click', () => {
+          const v = $('video'), c = document.createElement('canvas');
+          c.width = v.videoWidth; c.height = v.videoHeight;
+          const ctx = c.getContext('2d');
+          if (facingMode === 'user') { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+          ctx.drawImage(v, 0, 0);
+          if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+          startCutout(c);
+        });
+      }
+
+      async function startCutout(img) {
+        $('loadingOverlay').classList.remove('hidden');
+        await new Promise(r => setTimeout(r, 50));
+        const res = await engine.generateMask(img, 'auto');
+        workCanvas = res.workCanvas; maskCanvas = res.maskCanvas;
+        renderRefine(); updateSticker();
+        $('loadingOverlay').classList.add('hidden');
+        setStage('refine');
+      }
+
+      function setupRefine() {
+        document.querySelectorAll('.tool-btn').forEach(b => {
+          b.addEventListener('click', () => {
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            b.classList.add('active'); activeTool = b.dataset.tool;
+          });
+        });
+        const rc = $('refineCanvas');
+        rc.addEventListener('mousedown', (e) => { isMouseDown = true; handleRefine(e); });
+        rc.addEventListener('mousemove', (e) => { if (isMouseDown && activeTool !== 'magic') handleRefine(e); });
+        window.addEventListener('mouseup', () => isMouseDown = false);
+        $('proceedStudioBtn').addEventListener('click', () => setStage('studio'));
+      }
+
+      function handleRefine(e) {
+        const rc = $('refineCanvas'), rect = rc.getBoundingClientRect();
+        const x = Math.round((e.clientX - rect.left) * (rc.width / rect.width));
+        const y = Math.round((e.clientY - rect.top) * (rc.height / rect.height));
+        if (activeTool === 'erase') engine.applyBrush(maskCanvas, x, y, brushSize, true);
+        else if (activeTool === 'restore') engine.applyBrush(maskCanvas, x, y, brushSize, false);
+        else if (activeTool === 'magic') engine.magicWandErase(workCanvas, maskCanvas, x, y, 35);
+        renderRefine(); updateSticker();
+      }
+
+      function renderRefine() {
+        const rc = $('refineCanvas'); rc.width = workCanvas.width; rc.height = workCanvas.height;
+        const ctx = rc.getContext('2d'); ctx.drawImage(workCanvas, 0, 0);
+        const mctx = maskCanvas.getContext('2d'), mData = mctx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+        const overlay = ctx.createImageData(rc.width, rc.height);
+        for (let i = 0; i < mData.data.length; i += 4) {
+          if (mData.data[i + 3] < 128) { overlay.data[i] = 239; overlay.data[i + 1] = 68; overlay.data[i + 2] = 68; overlay.data[i + 3] = 130; }
+        }
+        const temp = document.createElement('canvas'); temp.width = rc.width; temp.height = rc.height;
+        temp.getContext('2d').putImageData(overlay, 0, 0); ctx.drawImage(temp, 0, 0);
+      }
+
+      function setupControls() {
+        $('borderWidthRange').addEventListener('input', (e) => {
+          $('borderWidthVal').textContent = e.target.value + 'px';
+          sticker2D.borderWidth = parseInt(e.target.value, 10); updateSticker();
+        });
+        $('smoothRange').addEventListener('input', (e) => {
+          $('smoothVal').textContent = ['Sharp', 'Medium', 'Soft'][e.target.value];
+          sticker2D.smoothness = parseInt(e.target.value, 10); updateSticker();
+        });
+        $('peelRange').addEventListener('input', (e) => {
+          $('peelVal').textContent = Math.round(e.target.value * 100) + '%';
+          sticker3D.setPeel(parseFloat(e.target.value));
+        });
+        document.querySelectorAll('.swatch').forEach(sw => {
+          sw.addEventListener('click', () => {
+            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+            sw.classList.add('active'); sticker2D.borderColor = sw.dataset.color; updateSticker();
+          });
+        });
+        document.querySelectorAll('.finish-card').forEach(fc => {
+          fc.addEventListener('click', () => {
+            document.querySelectorAll('.finish-card').forEach(f => f.classList.remove('active'));
+            fc.classList.add('active'); sticker3D.setFinish(fc.dataset.finish);
+          });
+        });
+        document.querySelectorAll('.mockup-item').forEach(mi => {
+          mi.addEventListener('click', () => {
+            document.querySelectorAll('.mockup-item').forEach(m => m.classList.remove('active'));
+            mi.classList.add('active'); sticker3D.setMockup(mi.dataset.mockup);
+            setStage(mi.dataset.mockup === 'none' ? 'studio' : 'mockup');
+          });
+        });
+        $('download2DPng').addEventListener('click', () => {
+          if (!compositeCanvas) return;
+          const a = document.createElement('a'); a.download = 'StickWhick-Sticker-2D.png';
+          a.href = compositeCanvas.toDataURL('image/png'); a.click();
+        });
+        $('download3DPng').addEventListener('click', () => {
+          const url = sticker3D.get3DScreenshot(); if (!url) return;
+          const a = document.createElement('a'); a.download = 'StickWhick-3D-Render.png'; a.href = url; a.click();
+        });
+        $('retryBtn').addEventListener('click', () => setStage('upload'));
+      }
+
+      function updateSticker() {
+        if (!workCanvas || !maskCanvas) return;
+        compositeCanvas = sticker2D.render(workCanvas, maskCanvas);
+        sticker3D.updateSticker(compositeCanvas);
+      }
+
+      window.addEventListener('DOMContentLoaded', init);
+    })();
+  </script>
+</body>
+</html>
