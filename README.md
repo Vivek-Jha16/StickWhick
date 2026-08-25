@@ -6,7 +6,7 @@ StickWhick is a modern AI-powered sticker maker that removes the background from
 
 > ⚡ No signup • No uploads • Everything runs locally in your browser.
 
----
+--
 
 # ✨ Features
 
